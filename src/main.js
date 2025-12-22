@@ -11,7 +11,7 @@ scene.fog = new THREE.FogExp2(CONFIG.scene.fogColor, CONFIG.scene.fogDensity);
 
 // Camera
 // Camera
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.001, 50); // Far clip drastically reduced
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.001, 10000); // Far clip drastically increased
 camera.position.set(0, 8, 15);
 camera.lookAt(0, 4, 0);
 
@@ -149,7 +149,7 @@ function animate() {
         // "Closer... can't see" means fog ALSO gets dense when near.
 
         // Base density 0.08 masks approx dist 50.
-        const baseDensity = 0.08;
+        const baseDensity = 0.0002;
         const proximityDensity = 0.5 / (controls.closestDistance + 0.1);
         // If dist=0.1, prox=0.5/0.2 = 2.5 (Very dense).
         // If dist=10, prox=0.5/10.1 = 0.05.

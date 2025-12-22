@@ -13,6 +13,7 @@ export class FractalTree {
             scaleFactor: params.scaleFactor || 0.6,
             coneColor: params.coneColor || 0x2E8B57,
             taperStart: params.taperStart || 0,
+            spineWidthRatio: params.spineWidthRatio || 1.0,
             ...params
         };
 
@@ -86,14 +87,21 @@ export class FractalTree {
     recursiveGeneration(parentPos, parentRot, parentScale, level) {
         if (level >= this.params.maxLevel) return;
 
-        // 1. Add Parent Itself to Matrices
+        // 1. Add Parent Itself to Matrices (Rendered with Visual Scale)
         const matrix = new THREE.Matrix4();
-        matrix.compose(parentPos, parentRot, parentScale);
+
+        // Decouple Visual Scale (Thickness) from Structural Scale (Length/Layout)
+        const visualScale = parentScale.clone();
+        visualScale.x *= this.params.spineWidthRatio;
+        visualScale.z *= this.params.spineWidthRatio;
+
+        matrix.compose(parentPos, parentRot, visualScale);
         this.matrices.push(matrix);
 
-        // 2. Generate Children
+        // 2. Generate Children (Positioned relative to structural flow, but attached to visual surface)
         const currentHeight = parentScale.y;
-        const currentRadius = parentScale.x; // Assumes x==z roughly
+        // Use visual radius for placement so branches attach to the thinner spine
+        const currentRadius = parentScale.x * this.params.spineWidthRatio;
 
         const ringCount = this.params.ringCount;
         const branchesPerRing = this.params.branchesPerRing;

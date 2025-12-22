@@ -18,6 +18,7 @@ export const CONFIG = {
         coneColor: 0x2E8B57,
         ringOffset: Math.PI / 5, // Rotation offset per ring for natural look
         taperStart: 0.1, // Start tapering earlier or later (0-1)
+        spineWidthRatio: 0.3, // Decouples visual width from structural width
     },
     star: {
         positionY: 12,
