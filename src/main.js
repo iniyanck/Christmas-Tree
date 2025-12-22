@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { FractalControls } from './FractalControls.js';
 import { FractalTree } from './spiralTree.js';
 import { FractalStar } from './fractalStar.js';
 import { CONFIG } from './config.js';
@@ -10,7 +10,7 @@ scene.background = new THREE.Color(CONFIG.scene.backgroundColor);
 scene.fog = new THREE.FogExp2(CONFIG.scene.fogColor, CONFIG.scene.fogDensity);
 
 // Camera
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 1000);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.001, 1000);
 camera.position.set(0, 8, 15);
 camera.lookAt(0, 4, 0);
 
@@ -23,11 +23,31 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
 // Controls
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.05;
-controls.maxPolarAngle = Math.PI / 1.5;
-controls.minDistance = 0.1; // Allow close zoom
+const controls = new FractalControls(camera, renderer.domElement, scene);
+// Controls help text
+const info = document.createElement('div');
+info.style.position = 'absolute';
+info.style.top = '10px';
+info.style.left = '10px';
+info.style.color = 'white';
+info.style.fontFamily = 'monospace';
+info.style.userSelect = 'none';
+info.innerHTML = 'Click to capture mouse<br>WASD to move<br>Space/Shift to Up/Down';
+document.body.appendChild(info);
+
+// Crosshair
+const crosshair = document.createElement('div');
+crosshair.style.position = 'absolute';
+crosshair.style.top = '50%';
+crosshair.style.left = '50%';
+crosshair.style.width = '10px';
+crosshair.style.height = '10px';
+crosshair.style.borderRadius = '50%';
+crosshair.style.border = '2px solid white';
+crosshair.style.transform = 'translate(-50%, -50%)';
+crosshair.style.pointerEvents = 'none';
+crosshair.style.mixBlendMode = 'difference';
+document.body.appendChild(crosshair);
 
 // Lights
 const ambientLight = new THREE.AmbientLight(CONFIG.scene.ambientLightColor, CONFIG.scene.ambientLightIntensity);
@@ -96,12 +116,12 @@ const clock = new THREE.Clock();
 function animate() {
     requestAnimationFrame(animate);
 
-    const time = clock.getElapsedTime();
+    const delta = clock.getDelta();
 
     if (tree) tree.update(camera);
     if (star) star.update();
 
-    controls.update();
+    controls.update(delta, tree ? tree.mesh : null);
     renderer.render(scene, camera);
 }
 
