@@ -30,7 +30,27 @@ export class FractalTree {
             flatShading: true
         });
 
-        this.generate();
+        if (this.params.preloadedMatrices) {
+            this.loadFromMatrices(this.params.preloadedMatrices);
+        } else {
+            this.generate();
+        }
+    }
+
+    loadFromMatrices(matrixData) {
+        // matrixData is a Float32Array
+        const matrixCount = matrixData.length / 16;
+        this.matrices = []; // We might not need to populate the array if we just set the attribute, but keep for consistency if used elsewhere.
+
+        this.mesh = new THREE.InstancedMesh(this.geometry, this.material, matrixCount);
+        this.mesh.castShadow = true;
+        this.mesh.receiveShadow = true;
+
+        // Directly set the instance matrix attribute
+        this.mesh.instanceMatrix.set(matrixData);
+        this.mesh.instanceMatrix.needsUpdate = true;
+
+        this.scene.add(this.mesh);
     }
 
     generate() {
@@ -138,5 +158,13 @@ export class FractalTree {
 
     update(camera) {
         // Optional
+    }
+
+    getMatrices() {
+        const matArray = new Float32Array(this.matrices.length * 16);
+        for (let i = 0; i < this.matrices.length; i++) {
+            this.matrices[i].toArray(matArray, i * 16);
+        }
+        return matArray;
     }
 }

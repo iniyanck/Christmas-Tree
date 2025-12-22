@@ -50,10 +50,42 @@ scene.add(rimLight);
 let tree;
 let star;
 
+async function loadGeometry() {
+    console.time("Geometry Load");
+
+    // Load Tree Binary
+    const treeResponse = await fetch('./tree.bin');
+    if (!treeResponse.ok) throw new Error("Failed to load tree.bin");
+    const treeBuffer = await treeResponse.arrayBuffer();
+    const treeMatrices = new Float32Array(treeBuffer);
+
+    // Load Star JSON
+    const starResponse = await fetch('./star.json');
+    if (!starResponse.ok) throw new Error("Failed to load star.json");
+    const starData = await starResponse.json();
+
+    console.timeEnd("Geometry Load");
+    return { treeMatrices, starData };
+}
+
 async function init() {
     console.log("Initializing infinite fractal tree...");
-    tree = new FractalTree(scene, CONFIG.tree);
-    star = new FractalStar(scene, CONFIG.star);
+
+    try {
+        const { treeMatrices, starData } = await loadGeometry();
+
+        // Pass preloaded data to configs
+        const treeConfig = { ...CONFIG.tree, preloadedMatrices: treeMatrices };
+        const starConfig = { ...CONFIG.star, preloadedData: starData };
+
+        tree = new FractalTree(scene, treeConfig);
+        star = new FractalStar(scene, starConfig);
+
+    } catch (e) {
+        console.warn("Could not load pre-generated geometry, falling back to runtime generation.", e);
+        tree = new FractalTree(scene, CONFIG.tree);
+        star = new FractalStar(scene, CONFIG.star);
+    }
 }
 
 init();

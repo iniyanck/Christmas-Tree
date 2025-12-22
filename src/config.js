@@ -10,11 +10,11 @@ export const CONFIG = {
     },
     tree: {
         maxLevel: 4,
-        height: 12,
+        height: 30,
         radius: 2.5,
         ringCount: 12, // Replaces spiralTurns
         branchesPerRing: 9, // Replaces branchesPerTurn
-        scaleFactor: 0.7,
+        scaleFactor: 0.5,
         coneColor: 0x2E8B57,
         ringOffset: Math.PI / 5, // Rotation offset per ring for natural look
         taperStart: 0.1, // Start tapering earlier or later (0-1)
