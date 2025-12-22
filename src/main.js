@@ -10,7 +10,8 @@ scene.background = new THREE.Color(CONFIG.scene.backgroundColor);
 scene.fog = new THREE.FogExp2(CONFIG.scene.fogColor, CONFIG.scene.fogDensity);
 
 // Camera
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.001, 1000);
+// Camera
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.001, 50); // Far clip drastically reduced
 camera.position.set(0, 8, 15);
 camera.lookAt(0, 4, 0);
 
@@ -122,6 +123,40 @@ function animate() {
     if (star) star.update();
 
     controls.update(delta, tree ? tree.mesh : null);
+
+    // Dynamic Fog Logic
+    // "closer to a surface... the more you can't see. Like a fog."
+    // "Make distant stuff de render" (fog handles this by hiding far stuff)
+
+    if (controls.closestDistance !== undefined) {
+        // Map distance to fog density.
+        // Close = Dense Fog. Far = Light/No Fog?
+        // Actually "Make distant stuff de render" implies we want a base fog that hides far things.
+        // AND "closer... more you can't see".
+        // This implies TWO fogs? Or one fog that is dense at 0 distance, AND dense at Infinity?
+        // That's tricky with standard Three.js FogExp2.
+
+        // Let's interpret "closer... can't see" as:
+        // As you get very very close (collision), screen fades to white/fog color.
+        // As you get far, standard fog hides the clipping plane.
+
+        // Standard FogExp2(density): Visibility ~ 1/e^(dist * density).
+        // If density is high, you see nothing.
+
+        // We want High Density when Distance is Low.
+        // We also want High Density (or just opacity) when Distance is High?
+        // No, "distant stuff de render" just means normal fog behavior (things far away are foggy).
+        // "Closer... can't see" means fog ALSO gets dense when near.
+
+        // Base density 0.08 masks approx dist 50.
+        const baseDensity = 0.08;
+        const proximityDensity = 0.5 / (controls.closestDistance + 0.1);
+        // If dist=0.1, prox=0.5/0.2 = 2.5 (Very dense).
+        // If dist=10, prox=0.5/10.1 = 0.05.
+
+        scene.fog.density = baseDensity + proximityDensity;
+    }
+
     renderer.render(scene, camera);
 }
 

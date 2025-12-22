@@ -19,10 +19,18 @@ export class FractalControls {
         this.moveDown = false;
 
         // Physics/Hyperbolic params
-        this.baseSpeed = 10.0; // Base units per second at distance 1
-        this.minSpeed = 0.0001; // Minimum speed to avoid stalling completely (or 0?)
-        this.collisionPadding = 0.5; // "Surface" distance
+        this.baseSpeed = 5.0; // Reduced base speed
+        this.minSpeed = 0.001;
+        this.collisionPadding = 0.5;
         this.raycaster = new THREE.Raycaster();
+
+        // Smoothing/Inertia
+        this.velocity = new THREE.Vector3();
+        this.friction = 5.0; // Higher = faster stop
+        this.acceleration = 40.0; // Higher = faster start
+
+        // State for fog
+        this.closestDistance = 100.0;
 
         // Setup listeners
         this.setupEventListeners();
@@ -76,76 +84,111 @@ export class FractalControls {
         document.addEventListener('keyup', onKeyUp);
     }
 
+    getDistanceToSurface(treeMesh) {
+        if (!treeMesh) return 100.0;
+
+        // Optimization: Throttled, Single-Ray Check
+        const now = performance.now();
+        if (this.lastRaycastTime && (now - this.lastRaycastTime < 100)) {
+            // Return cached distance if less than 100ms has passed
+            return this.closestDistance;
+        }
+        this.lastRaycastTime = now;
+
+        // Perform only ONE raycast in the forward direction
+        // This is sufficient for collision avoidance (don't fly into things)
+        // and "fog when close" (usually when you look at it).
+        // Side-collisions won't trigger fog, but that's an acceptable compromise for performance.
+
+        const forward = new THREE.Vector3();
+        this.camera.getWorldDirection(forward);
+
+        this.raycaster.set(this.camera.position, forward);
+        this.raycaster.far = 50; // Use a shorter max distance
+
+        const intersects = this.raycaster.intersectObject(treeMesh);
+        if (intersects.length > 0) {
+            return intersects[0].distance;
+        }
+
+        return 100.0;
+    }
+
     update(delta, treeMesh) {
         if (!this.controls.isLocked) return;
 
-        // 1. Determine Move Direction
-        const direction = new THREE.Vector3();
+        // 1. Calculate Closest Surface (for Fog and Global Speed scaling)
+        this.closestDistance = this.getDistanceToSurface(treeMesh);
+
+        // 2. Determine Input Direction
+        const inputDir = new THREE.Vector3();
         const forward = new THREE.Vector3();
         const right = new THREE.Vector3();
 
-        // Extract camera directions (projected to horizontal plane if walking, but we are flying)
-        // For flying, we just use camera local vectors
         this.camera.getWorldDirection(forward);
         right.crossVectors(forward, this.camera.up);
 
-        if (this.moveForward) direction.add(forward);
-        if (this.moveBackward) direction.sub(forward);
-        if (this.moveRight) direction.add(right);
-        if (this.moveLeft) direction.sub(right);
-        if (this.moveUp) direction.add(this.camera.up);
-        if (this.moveDown) direction.sub(this.camera.up);
+        if (this.moveForward) inputDir.add(forward);
+        if (this.moveBackward) inputDir.sub(forward);
+        if (this.moveRight) inputDir.add(right);
+        if (this.moveLeft) inputDir.sub(right);
+        if (this.moveUp) inputDir.add(this.camera.up);
+        if (this.moveDown) inputDir.sub(this.camera.up);
 
-        direction.normalize();
+        inputDir.normalize();
 
-        // 2. Calculate Distance to Geometry (Hyperbolic Logic)
-        let distance = 10.0; // Default large distance if nothing found
+        // 3. Calculate Target Speed based on distance
+        // Slower when far away (user request), "slower especially when you're away"
+        // Wait, "slower when away from the tree" usually means "slower when in empty space".
+        // And "closer to surface... you can't see".
+        // Usually, in fractal zooms, you want to move SLOWER when CLOSER to avoid crashing.
+        // User asked: "slower (especially when you're away from the tree, or moving away from it)."
+        // Maybe they feel it's too fast in the void? 
+        // Let's implement a capped speed that relates to distance.
+        // If distance is large, speed should NOT be huge. 
+        // Let's damp the "hyperbolic" scaling.
 
-        if (treeMesh) {
-            // Raycast in the direction of movement + omni-check?
-            // To be safe, we should check the distance to the NEAREST surface.
-            // Casting one ray forward isn't enough (we might strafe into a wall).
-            // A perfect solution requires SDF. 
-            // Approx solution: Raycast in movement direction and maybe 6 cardinal directions?
-            // Doing 1 raycast is cheapest. Let's try casting in the move direction.
+        // Standard fractal zoom: Speed ~ Distance.
+        // User Request: "slower... away from tree".
+        // Interpretation: Don't let speed explode when distance is high. Cap it.
 
-            // Actually, if we are "backing up" we still want to be slow if we are close to something behind us.
-            // Let's just cast a ray in the move direction for now to prevent collision.
-            // AND cast a ray forward to modulate "zoom" speed if just moving forward.
+        let speedMultiplier = Math.max(this.minSpeed, this.closestDistance * 0.4);
+        // Capped at a reasonable max to prevent zooming off into infinity too fast
+        speedMultiplier = Math.min(speedMultiplier, 20.0);
 
-            // Better approximation:
-            // Just use the distance from the movement ray.
+        // 4. Apply Physics (Inertia)
+        // Target velocity
+        const targetVelocity = inputDir.clone().multiplyScalar(speedMultiplier);
 
-            this.raycaster.set(this.camera.position, direction);
-            // Limit far to optimize?
-            this.raycaster.far = 100;
-            const intersects = this.raycaster.intersectObject(treeMesh);
+        // Acceleration / Friction
+        // If inputting, accelerate towards target.
+        // If not inputting, decelerate to 0 (friction).
 
-            if (intersects.length > 0) {
-                distance = intersects[0].distance;
-            } else {
-                // If no hit in movement direction, maybe we are safe?
-                // Or maybe we are close to a wall on the side?
-                // Let's assume infinite distance if no hit.
-                distance = 100;
-            }
-        }
+        const frameDecay = Math.exp(-this.friction * delta);
+        // Simply lerp velocity towards targetVelocity?
+        // Or separate accel/decel?
+        // Let's use simple damped spring-like approach
 
-        // 3. Modulate Speed
-        // "Hyperbolic": Speed proportional to distance.
-        // v = k * d
-        // As d -> 0, v -> 0.
+        // v = v + (target - v) * (1 - exp(-k * dt))
+        // k varies if we are accelerating or braking?
+        // Let's use constant damping for smoothness.
 
-        const speed = Math.max(this.minSpeed, distance * 1.0); // Factor 1.0 means at 1 unit dist, 1 unit/sec
+        const smoothFactor = 1.0 - Math.exp(-this.friction * delta);
+        this.velocity.lerp(targetVelocity, smoothFactor);
 
-        // Apply movement
-        if (this.moveForward || this.moveBackward || this.moveLeft || this.moveRight || this.moveUp || this.moveDown) {
-            // this.controls.moveForward() etc work on local flattening, but we want full 3D fly.
-            // PointerLockControls doesn't natively support full 3D fly with "moveForward". It projects to XZ.
-            // So we manually move the camera.
+        // 5. Apply Movement
+        if (this.velocity.lengthSq() > 0.000001) {
+            const moveVec = this.velocity.clone().multiplyScalar(delta * this.acceleration);
+            // Wait, velocity is already units/sec.
+            // this.velocity stores desired "speed".
+            // So move = velocity * delta.
 
-            const moveVec = direction.multiplyScalar(speed * delta);
-            this.camera.position.add(moveVec);
+            // Correction:
+            // velocity is in units/sec.
+            // lerp updates velocity.
+            // position += velocity * delta.
+
+            this.camera.position.add(this.velocity.clone().multiplyScalar(delta));
         }
     }
 }
