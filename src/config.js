@@ -21,8 +21,8 @@ export const CONFIG = {
         spineWidthRatio: 0.3, // Decouples visual width from structural width
     },
     star: {
-        positionY: 12,
-        radius: 0.8,
+        positionY: 35,
+        radius: 3,
         color1: 0xffd700,
         emissive1: 0xffaa00,
         color2: 0xffffee,
